@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SeedScout — Minecraft Seed Finder for Speedrunners</title>
+<meta name="description" content="Real Minecraft Java/Bedrock seed finder. Accurate structure algorithms (village, bastion, stronghold, fortress). Interactive biome map.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#090b0e;--sf:#0f1218;--sf2:#161b22;--sf3:#1c2330;--br:#21283a;--ac:#00e5ff;--ac2:#69ff47;--ac3:#ff6b35;--tx:#d0dce8;--mu:#4a5568;--jv:#ff8c42;--bk:#9b59b6;--dr:#e74c3c;}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono',monospace;display:flex;flex-direction:column;}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);pointer-events:none;z-index:9999;}
+#hdr{flex:none;height:50px;background:var(--sf);border-bottom:1px solid var(--br);display:flex;align-items:center;gap:14px;padding:0 16px;z-index:50;}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:25px;letter-spacing:3px;color:var(--ac);text-shadow:0 0 20px rgba(0,229,255,.35);white-space:nowrap;}
+.logo em{color:var(--ac2);font-style:normal;}
+.hdr-div{width:1px;height:26px;background:var(--br);}
+.hdr-sub{font-size:9px;color:var(--mu);letter-spacing:2px;text-transform:uppercase;}
+.hdr-r{margin-left:auto;display:flex;gap:8px;align-items:center;}
+.pill{font-size:9px;font-weight:700;letter-spacing:1px;padding:3px 8px;border-radius:3px;text-transform:uppercase;}
+.pj{background:rgba(255,140,66,.1);color:var(--jv);border:1px solid rgba(255,140,66,.22);}
+.pb{background:rgba(155,89,182,.1);color:var(--bk);border:1px solid rgba(155,89,182,.22);}
+#main{flex:1;display:grid;grid-template-columns:296px 1fr;min-height:0;}
+#sb{background:var(--sf);border-right:1px solid var(--br);display:flex;flex-direction:column;overflow:hidden;}
+#sb-body{flex:1;overflow-y:auto;padding:13px;scrollbar-width:thin;scrollbar-color:var(--br) transparent;}
+.sl{font-size:8px;letter-spacing:3px;text-transform:uppercase;color:var(--mu);margin-bottom:7px;display:flex;align-items:center;gap:8px;}
+.sl::after{content:'';flex:1;height:1px;background:var(--br);}
+.sec{margin-bottom:14px;}
+.vtog{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.vbtn{padding:9px;border:1px solid var(--br);background:transparent;color:var(--mu);font-family:inherit;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;border-radius:4px;transition:all .15s;text-transform:uppercase;}
+.vbtn.oj{background:rgba(255,140,66,.1);border-color:var(--jv);color:var(--jv);}
+.vbtn.ob{background:rgba(155,89,182,.1);border-color:var(--bk);color:var(--bk);}
+input[type=text],input[type=number],select{width:100%;background:var(--sf2);border:1px solid var(--br);color:var(--tx);font-family:inherit;font-size:12px;padding:9px 12px;border-radius:4px;outline:none;transition:border-color .15s;}
+input:focus,select:focus{border-color:var(--ac);box-shadow:0 0 0 2px rgba(0,229,255,.07);}
+select option{background:var(--sf2);}
+.ir{display:flex;gap:6px;}
+.ir input{flex:1;}
+.btn{padding:9px 14px;border:none;border-radius:4px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;transition:all .15s;text-transform:uppercase;white-space:nowrap;}
+.bi{padding:9px 11px;font-size:13px;}
+.bg{background:var(--sf2);color:var(--tx);border:1px solid var(--br);}
+.bg:hover{border-color:var(--ac);color:var(--ac);}
+.bp{background:var(--ac);color:#000;font-weight:900;}
+.bp:hover{background:#fff;box-shadow:0 0 20px rgba(0,229,255,.3);}
+.bf{width:100%;padding:12px;font-size:12px;}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.si{display:flex;align-items:center;gap:7px;padding:8px 9px;background:var(--sf2);border:1px solid var(--br);border-radius:4px;cursor:pointer;transition:all .15s;user-select:none;font-size:10px;}
+.si:hover{border-color:var(--mu);}
+.si.on{border-color:var(--ac2);background:rgba(105,255,71,.04);color:var(--ac2);}
+.si input{display:none;}
+.si-icon{font-size:13px;line-height:1;flex-shrink:0;}
+.rr{display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px;color:var(--mu);}
+.rv{color:var(--ac);font-weight:700;}
+input[type=range]{-webkit-appearance:none;width:100%;height:2px;background:var(--br);outline:none;border-radius:1px;border:none;padding:0;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:var(--ac);cursor:pointer;box-shadow:0 0 6px rgba(0,229,255,.4);}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.fl{font-size:9px;color:var(--mu);margin-bottom:4px;letter-spacing:.5px;}
+#sbtn{background:linear-gradient(135deg,var(--ac),#00b8d4);color:#000;font-weight:900;box-shadow:0 0 18px rgba(0,229,255,.18);}
+#sbtn:hover{background:linear-gradient(135deg,#fff,var(--ac));}
+#sbtn.srch{background:rgba(231,76,60,.1);color:var(--dr);border:1px solid rgba(231,76,60,.25);box-shadow:none;}
+#pw{display:none;margin-top:10px;}
+#pw.on{display:block;}
+.pt{height:2px;background:var(--br);border-radius:1px;overflow:hidden;}
+#pb{height:100%;background:linear-gradient(90deg,var(--ac),var(--ac2));width:0;transition:width .12s;}
+#ptx{font-size:9px;color:var(--mu);margin-top:5px;letter-spacing:1px;}
+#rh{flex:none;display:flex;align-items:center;justify-content:space-between;padding:9px 13px;border-top:1px solid var(--br);background:var(--sf2);}
+#rc{font-size:10px;color:var(--mu);letter-spacing:1px;}
+#rc strong{color:var(--ac2);}
+#rl{max-height:195px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--br) transparent;}
+.ri{display:flex;align-items:center;gap:10px;padding:8px 13px;border-bottom:1px solid rgba(33,40,58,.4);cursor:pointer;transition:all .1s;border-left:2px solid transparent;}
+.ri:hover,.ri.on{background:rgba(0,229,255,.04);border-left-color:var(--ac);}
+.rs{font-size:12px;font-weight:700;color:var(--ac);flex:1;font-variant-numeric:tabular-nums;}
+.rt{display:flex;gap:4px;flex-wrap:wrap;}
+.rtag{font-size:8px;padding:2px 5px;border-radius:2px;background:rgba(105,255,71,.07);color:var(--ac2);border:1px solid rgba(105,255,71,.13);letter-spacing:.5px;}
+.rscore{font-size:10px;color:var(--ac3);font-weight:700;white-space:nowrap;}
+#cred{flex:none;padding:7px 13px;border-top:1px solid var(--br);font-size:8px;color:var(--mu);line-height:1.8;}
+#cred a{color:rgba(0,229,255,.4);text-decoration:none;}
+#cred a:hover{color:var(--ac);}
+#ma{position:relative;background:#050709;display:flex;flex-direction:column;overflow:hidden;}
+#mtb{flex:none;display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(9,11,14,.95);border-bottom:1px solid var(--br);backdrop-filter:blur(8px);z-index:10;flex-wrap:wrap;}
+#sd{font-size:13px;font-weight:700;color:var(--ac);padding:5px 12px;background:rgba(0,229,255,.05);border:1px solid rgba(0,229,255,.16);border-radius:3px;letter-spacing:1px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.lbs{display:flex;gap:4px;}
+.lb{padding:5px 9px;font-size:8px;letter-spacing:1px;text-transform:uppercase;border:1px solid var(--br);background:transparent;color:var(--mu);cursor:pointer;border-radius:3px;font-family:inherit;transition:all .15s;}
+.lb.on,.lb:hover{border-color:var(--ac);color:var(--ac);background:rgba(0,229,255,.04);}
+.zbs{display:flex;gap:4px;margin-left:auto;}
+.zb{padding:5px 9px;font-size:11px;background:var(--sf2);border:1px solid var(--br);color:var(--tx);cursor:pointer;border-radius:3px;transition:all .15s;font-family:inherit;}
+.zb:hover{border-color:var(--ac);color:var(--ac);}
+#mc{flex:1;display:block;cursor:crosshair;}
+#me{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;}
+.mei{font-size:54px;margin-bottom:12px;opacity:.09;filter:grayscale(1);}
+.met{font-size:10px;color:var(--mu);letter-spacing:2px;text-transform:uppercase;opacity:.35;}
+#rp{position:absolute;bottom:0;left:0;right:0;height:2px;background:transparent;pointer-events:none;z-index:30;display:none;}
+#rb{height:100%;background:var(--ac);width:0;box-shadow:0 0 8px var(--ac);}
+#co{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(9,11,14,.87);border:1px solid var(--br);padding:6px 14px;border-radius:3px;font-size:10px;color:var(--mu);pointer-events:none;backdrop-filter:blur(6px);white-space:nowrap;z-index:20;}
+#co span{color:var(--ac);}
+#sp{position:absolute;top:60px;right:10px;background:rgba(9,11,14,.93);border:1px solid var(--br);border-radius:5px;padding:10px;max-width:195px;z-index:20;backdrop-filter:blur(10px);display:none;max-height:calc(100% - 80px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--br) transparent;}
+#sp h4{font-size:8px;letter-spacing:2px;color:var(--mu);margin-bottom:8px;text-transform:uppercase;}
+.spi{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid rgba(33,40,58,.35);cursor:pointer;}
+.spi:last-child{border-bottom:none;}
+.spd{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.spn{font-size:9px;font-weight:700;flex:1;}
+.spc{font-size:8px;color:var(--mu);}
+.spdi{font-size:8px;color:var(--ac3);white-space:nowrap;}
+#bl{position:absolute;bottom:46px;right:10px;background:rgba(9,11,14,.93);border:1px solid var(--br);border-radius:5px;padding:10px;z-index:20;backdrop-filter:blur(10px);display:none;max-height:220px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--br) transparent;}
+#bl h4{font-size:8px;letter-spacing:2px;color:var(--mu);margin-bottom:8px;text-transform:uppercase;}
+.blr{display:flex;align-items:center;gap:6px;margin-bottom:3px;}
+.bls{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
+.bln{font-size:8px;color:#4a5a6e;}
+#tt{position:absolute;background:rgba(9,11,14,.96);border:1px solid var(--br);padding:7px 11px;border-radius:4px;font-size:10px;pointer-events:none;z-index:100;display:none;line-height:1.6;}
+#nt{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--sf2);border:1px solid var(--ac);color:var(--ac);padding:9px 18px;border-radius:4px;font-size:10px;letter-spacing:1px;z-index:9998;transition:transform .25s;box-shadow:0 4px 20px rgba(0,229,255,.18);white-space:nowrap;}
+#nt.on{transform:translateX(-50%) translateY(0);}
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-thumb{background:var(--br);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div class="logo">Seed<em>Scout</em></div>
+  <div class="hdr-div"></div>
+  <div class="hdr-sub">Minecraft Seed Finder for Speedrunners</div>
+  <div class="hdr-r">
+    <span class="pill pj">Java</span>
+    <span class="pill pb">Bedrock</span>
+  </div>
+</div>
+
+<div id="main">
+  <div id="sb">
+    <div id="sb-body">
+
+      <div class="sec">
+        <div class="sl">Platform</div>
+        <div class="vtog">
+          <button class="vbtn oj" id="bjv" onclick="setVer('java')">☕ Java</button>
+          <button class="vbtn"    id="bbk" onclick="setVer('bedrock')">🪨 Bedrock</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sl">Version</div>
+        <select id="gv">
+          <option value="1.21">Java 1.21</option>
+          <option value="1.20">Java 1.20</option>
+          <option value="1.19">Java 1.19</option>
+          <option value="1.18">Java 1.18</option>
+          <option value="1.16" selected>Java 1.16 (RSG meta)</option>
+          <option value="1.14">Java 1.14</option>
+        </select>
+      </div>
+
+      <div class="sec">
+        <div class="sl">Seed</div>
+        <div class="ir">
+          <input type="text" id="si" placeholder="Enter seed or leave blank to search..." spellcheck="false">
+          <button class="btn bg bi" title="Random seed" onclick="doRand()">🎲</button>
+          <button class="btn bg bi" title="Copy seed"   onclick="doCopy()">📋</button>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:6px;">
+          <button class="btn bg" style="flex:1;font-size:9px;" onclick="doLoad()">Load Seed →</button>
+          <button class="btn bg"   style="font-size:9px;"      onclick="doShare()">Share 🔗</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sl">Required Structures</div>
+        <div class="sg" id="sg"></div>
+      </div>
+
+      <div class="sec">
+        <div class="sl">Spawn Radius</div>
+        <div class="rr"><span>Max distance</span><span class="rv" id="drv">500</span> blocks</div>
+        <input type="range" min="64" max="3000" step="64" value="500" id="dr"
+          oninput="document.getElementById('drv').textContent=this.value">
+      </div>
+
+      <div class="sec">
+        <div class="sl">Seeds to Check</div>
+        <div class="rr"><span>Count</span><span class="rv" id="trv">5000</span></div>
+        <input type="range" min="100" max="100000" step="100" value="5000" id="tr"
+          oninput="document.getElementById('trv').textContent=(+this.value).toLocaleString()">
+      </div>
+
+      <div class="sec">
+        <div class="sl">Map Options</div>
+        <div class="g2">
+          <div>
+            <div class="fl">Layer</div>
+            <select id="ls" onchange="onLC()">
+              <option value="biome">Biomes</option>
+              <option value="height">Height</option>
+              <option value="temp">Temperature</option>
+            </select>
+          </div>
+          <div>
+            <div class="fl">Dimension</div>
+            <select id="ds" onchange="onDC()">
+              <option value="overworld">Overworld</option>
+              <option value="nether">Nether</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn bf" id="sbtn" onclick="toggle()">⚡ Find Seeds</button>
+      <div id="pw">
+        <div class="pt"><div id="pb"></div></div>
+        <div id="ptx">READY</div>
+      </div>
+
+    </div>
+
+    <div id="rh">
+      <div id="rc">RESULTS: <strong>0</strong> found</div>
+      <button class="btn bg" style="font-size:8px;padding:4px 8px;" onclick="doExp()">EXPORT</button>
+    </div>
+    <div id="rl"></div>
+
+    <div id="cred">
+      <a href="https://github.com/Cubitect/cubiomes" target="_blank">Cubiomes</a> (Java) ·
+      <a href="https://github.com/reedacartwright/cubiomes/tree/bedrock" target="_blank">Cubiomes Fork</a> (Bedrock) ·
+      <a href="https://github.com/Earthcomputer/bedrockified" target="_blank">Bedrockified</a> ·
+      <a href="https://github.com/bedrock-dev/MCBEStructureFinder" target="_blank">MCBEStructureFinder</a> ·
+      <a href="https://github.com/openlayers/openlayers" target="_blank">OpenLayers-inspired</a>
+    </div>
+  </div>
+
+  <div id="ma">
+    <div id="mtb">
+      <div id="sd">NO SEED</div>
+      <div class="lbs">
+        <button class="lb on" data-layer="biome"  onclick="setL(this,'biome')">BIOMES</button>
+        <button class="lb"    data-layer="height" onclick="setL(this,'height')">HEIGHT</button>
+        <button class="lb"    data-layer="temp"   onclick="setL(this,'temp')">TEMP</button>
+        <button class="lb"    data-layer="struct" onclick="setL(this,'struct')">STRUCT</button>
+      </div>
+      <div class="zbs">
+        <button class="zb" onclick="doZ(1.5)">＋</button>
+        <button class="zb" onclick="doZ(1/1.5)">－</button>
+        <button class="zb" onclick="rstV()">⌂</button>
+      </div>
+    </div>
+    <canvas id="mc"></canvas>
+    <div id="rp"><div id="rb"></div></div>
+    <div id="me"><div class="mei">🗺️</div><div class="met">Enter a seed or run a search</div></div>
+    <div id="sp"><h4>📍 Structures</h4><div id="sl2"></div></div>
+    <div id="bl"><h4>Biomes</h4><div id="blc"></div></div>
+    <div id="co">X: <span id="cx">0</span> &nbsp;Z: <span id="cz">0</span> &nbsp;|&nbsp; <span id="zl">2.0×</span></div>
+    <div id="tt"></div>
+  </div>
+</div>
+
+<div id="nt"></div>
+
+<script id="wsrc" type="text/plain">
+// SeedScout Worker — Minecraft Java Edition seed algorithms
+
+// Inline engine for Web Worker (no ES modules)
+const M48 = (1n << 48n) - 1n;
+const MULT = 0x5DEECE66Dn;
+const ADD  = 0xBn;
+
+function makeRng(seed) {
+  let s = (BigInt(seed) ^ MULT) & M48;
+  return {
+    nextInt(bound) {
+      s = (s * MULT + ADD) & M48;
+      const bits = Number(s >> 17n);
+      if (bound === undefined) return bits;
+      if ((bound & (bound - 1)) === 0)
+        return Number(BigInt(bits) * BigInt(bound) >> 31n);
+      let val;
+      do {
+        s = (s * MULT + ADD) & M48;
+        val = Number(s >> 17n) % bound;
+      } while (val < 0);
+      return val;
+    },
+    nextFloat() {
+      s = (s * MULT + ADD) & M48;
+      return Number(s >> 24n) / (1 << 24);
+    }
+  };
+}
+
+const STRUCTURES = {
+  village:       { spacing:34,  sep:8,  salt:10387312  },
+  desert_temple: { spacing:32,  sep:8,  salt:14357617  },
+  jungle_temple: { spacing:32,  sep:8,  salt:14357619  },
+  witch_hut:     { spacing:32,  sep:8,  salt:14357620  },
+  igloo:         { spacing:32,  sep:8,  salt:14357618  },
+  shipwreck:     { spacing:24,  sep:4,  salt:165745295 },
+  ocean_ruin:    { spacing:20,  sep:8,  salt:14357621  },
+  monument:      { spacing:32,  sep:5,  salt:10387313  },
+  mansion:       { spacing:80,  sep:20, salt:10387319  },
+  ruined_portal: { spacing:40,  sep:15, salt:34222645  },
+  bastion:       { spacing:27,  sep:4,  salt:30084232  },
+  fortress:      { spacing:27,  sep:4,  salt:59247     },
+};
+
+function getStructurePos(worldSeed, regionX, regionZ, { spacing, sep, salt }) {
+  const ws = BigInt.asIntN(64, BigInt(worldSeed));
+  const rx = BigInt.asIntN(64, BigInt(regionX));
+  const rz = BigInt.asIntN(64, BigInt(regionZ));
+  const s  = BigInt.asIntN(64, BigInt(salt));
+  const ss = BigInt.asIntN(64, rx * 341873128712n + rz * 132897987541n + ws + s);
+  const rng = makeRng(ss);
+  const cx = regionX * spacing + rng.nextInt(spacing - sep);
+  const cz = regionZ * spacing + rng.nextInt(spacing - sep);
+  return { x: cx * 16, z: cz * 16 };
+}
+
+function findStructures(worldSeed, structId, radiusChunks) {
+  const cfg = STRUCTURES[structId];
+  if (!cfg) return [];
+  const results = [];
+  const rr = Math.ceil(radiusChunks / cfg.spacing) + 1;
+  for (let rx = -rr; rx <= rr; rx++) {
+    for (let rz = -rr; rz <= rr; rz++) {
+      const pos  = getStructurePos(worldSeed, rx, rz, cfg);
+      const cx = pos.x >> 4, cz = pos.z >> 4;
+      if (Math.abs(cx) <= radiusChunks && Math.abs(cz) <= radiusChunks) {
+        const dist = Math.round(Math.sqrt(pos.x**2 + pos.z**2));
+        results.push({ ...pos, dist, type: structId });
+      }
+    }
+  }
+  return results.sort((a, b) => a.dist - b.dist);
+}
+
+function findStrongholds(worldSeed, count) {
+  const rng = makeRng(worldSeed);
+  let angle = rng.nextFloat() * Math.PI * 2;
+  const positions = [];
+  const rings = [
+    { count: 3,  minDist: 1408,  maxDist: 2688  },
+    { count: 6,  minDist: 4480,  maxDist: 5760  },
+    { count: 10, minDist: 7552,  maxDist: 8832  },
+    { count: 15, minDist:10624,  maxDist: 11904 },
+  ];
+  for (const ring of rings) {
+    let dist = ring.minDist + rng.nextInt(ring.maxDist - ring.minDist + 1);
+    const step = (Math.PI * 2) / ring.count;
+    for (let i = 0; i < ring.count; i++) {
+      const x = Math.round(Math.cos(angle) * dist);
+      const z = Math.round(Math.sin(angle) * dist);
+      positions.push({ x, z, dist: Math.round(Math.sqrt(x*x+z*z)), type:'stronghold' });
+      if (positions.length >= count) return positions;
+      angle += step;
+    }
+    angle += rng.nextFloat() * Math.PI * 2;
+  }
+  return positions;
+}
+
+function scoreSeed(worldSeed, opts) {
+  const { requiredStructs = [], maxDist = 500 } = opts || {};
+  let score = 0;
+  const found = {};
+  for (const structId of requiredStructs) {
+    if (structId === 'stronghold') {
+      const shs = findStrongholds(worldSeed, 3);
+      if (shs[0]) { score += Math.max(0, 100 - shs[0].dist/50); found.stronghold = shs[0]; }
+      continue;
+    }
+    const positions = findStructures(worldSeed, structId, Math.ceil(maxDist/16));
+    if (positions.length > 0) {
+      const n = positions[0];
+      score += Math.max(0, 100 - n.dist/(maxDist/100));
+      found[structId] = n;
+    }
+  }
+  return { score: Math.round(score), found };
+}
+
+
+function valueNoise(ws, x, z, scale) {
+  const ix = Math.floor(x / scale);
+  const iz = Math.floor(z / scale);
+  const fx = (x / scale) - ix, fz = (z / scale) - iz;
+  const ux = fx*fx*(3-2*fx), uz = fz*fz*(3-2*fz);
+  const h = (gx, gz) => {
+    let v = BigInt.asIntN(64, BigInt(ws) + BigInt(gx)*7738898437n + BigInt(gz)*5765169329n);
+    v = BigInt.asIntN(64, v ^ (v >> 17n));
+    v = BigInt.asIntN(64, v * 0x9e3779b97f4a7c15n);
+    v = BigInt.asIntN(64, v ^ (v >> 31n));
+    v = BigInt.asIntN(64, v * 0x85ebca6b9c100d45n);
+    return Number(BigInt.asUintN(32, v)) / 4294967295;
+  };
+  const a=h(ix,iz), b=h(ix+1,iz), c=h(ix,iz+1), d=h(ix+1,iz+1);
+  return a*(1-ux)*(1-uz) + b*ux*(1-uz) + c*(1-ux)*uz + d*ux*uz;
+}
+
+function getBiomeAt(worldSeed, x, z) {
+  const ws = typeof worldSeed === 'bigint' ? worldSeed : BigInt(worldSeed);
+  const cont = valueNoise(ws, x, z, 700)
+             + valueNoise(ws+1n, x, z, 200) * 0.35
+             + valueNoise(ws+2n, x, z, 60)  * 0.1;
+  const temp = valueNoise(ws+3n, x, z, 900)
+             + valueNoise(ws+4n, x, z, 250) * 0.3;
+  const humi = valueNoise(ws+5n, x, z, 800)
+             + valueNoise(ws+6n, x, z, 220) * 0.3;
+  const weid = valueNoise(ws+7n, x, z, 350)
+             + valueNoise(ws+8n, x, z, 100) * 0.25;
+  const eros = valueNoise(ws+9n, x, z, 550)
+             + valueNoise(ws+10n,x, z, 150) * 0.25;
+
+  // Normalize to 0-1
+  const C = Math.max(0,Math.min(1, cont/1.45));
+  const T = Math.max(0,Math.min(1, temp/1.3));
+  const H = Math.max(0,Math.min(1, humi/1.3));
+  const W = Math.max(0,Math.min(1, weid/1.25));
+  const E = Math.max(0,Math.min(1, eros/1.25));
+
+  if (C < 0.22) {
+    if (T < 0.18) return E < 0.4 ? 'deep_frozen_ocean' : 'frozen_ocean';
+    if (C < 0.14) return T < 0.55 ? 'deep_cold_ocean' : T < 0.78 ? 'deep_ocean' : T < 0.92 ? 'deep_lukewarm_ocean' : 'deep_warm_ocean';
+    return T < 0.3 ? 'cold_ocean' : T < 0.7 ? 'ocean' : T < 0.88 ? 'lukewarm_ocean' : 'warm_ocean';
+  }
+  if (C < 0.30) {
+    if (T < 0.18) return 'snowy_beach';
+    if (H > 0.6)  return 'stony_shore';
+    return 'beach';
+  }
+  if (E < 0.22) { // mountains
+    if (T < 0.2) return W > 0.5 ? 'frozen_peaks' : 'jagged_peaks';
+    if (T < 0.4) return 'stony_peaks';
+    if (T < 0.6) return H > 0.5 ? 'windswept_forest' : 'windswept_hills';
+    return H > 0.6 ? 'grove' : 'windswept_gravelly_hills';
+  }
+  if (T < 0.18) {
+    if (H < 0.4) return 'snowy_plains';
+    if (H < 0.7) return 'ice_spikes';
+    return 'snowy_taiga';
+  }
+  if (T < 0.34) {
+    if (H < 0.25) return 'plains';
+    if (H < 0.5)  return W > 0.6 ? 'taiga' : 'plains';
+    if (H < 0.75) return W > 0.5 ? 'old_growth_pine_taiga' : 'taiga';
+    return 'old_growth_spruce_taiga';
+  }
+  if (T < 0.55) {
+    if (H < 0.18) return W > 0.55 ? 'sunflower_plains' : 'plains';
+    if (H < 0.38) return W > 0.65 ? 'flower_forest' : 'plains';
+    if (H < 0.6)  return W > 0.55 ? 'dark_forest' : 'forest';
+    if (H < 0.78) return W > 0.5 ? 'old_growth_birch_forest' : 'birch_forest';
+    if (H < 0.9)  return 'swamp';
+    return W > 0.5 ? 'mangrove_swamp' : 'swamp';
+  }
+  if (T < 0.76) {
+    if (H < 0.16) return E > 0.6 ? 'savanna_plateau' : 'savanna';
+    if (H < 0.35) return 'savanna';
+    if (H < 0.58) return W > 0.65 ? 'bamboo_jungle' : 'jungle';
+    if (H < 0.78) return 'sparse_jungle';
+    if (H < 0.92) return 'mushroom_fields';
+    return 'mangrove_swamp';
+  }
+  // Hot
+  if (H < 0.18) return E > 0.55 ? 'eroded_badlands' : 'badlands';
+  if (H < 0.35) return W > 0.5  ? 'wooded_badlands' : 'badlands';
+  if (H < 0.55) return 'desert';
+  if (H < 0.75) return 'savanna';
+  if (H < 0.88) return W > 0.5 ? 'bamboo_jungle' : 'jungle';
+  return 'jungle';
+}
+
+function getNetherBiomeAt(worldSeed, x, z) {
+  const ws = typeof worldSeed === 'bigint' ? worldSeed : BigInt(worldSeed);
+  const t = valueNoise(ws+100n, x, z, 400) + valueNoise(ws+101n, x, z, 100)*0.4;
+  const T = Math.max(0,Math.min(1, t/1.4));
+  if (T < 0.18) return 'soul_sand_valley';
+  if (T < 0.36) return 'basalt_deltas';
+  if (T < 0.52) return 'nether_wastes';
+  if (T < 0.70) return 'warped_forest';
+  return 'crimson_forest';
+}
+
+const BIOME_COLORS = {
+  ocean:                    '#1a6b9a',
+  deep_ocean:               '#0d4f75',
+  frozen_ocean:             '#7aa7be',
+  cold_ocean:               '#1a6b8a',
+  lukewarm_ocean:           '#45adb5',
+  warm_ocean:               '#43d5ee',
+  deep_frozen_ocean:        '#5e97b0',
+  deep_cold_ocean:          '#155e7a',
+  deep_lukewarm_ocean:      '#15a0b0',
+  deep_warm_ocean:          '#00c0d5',
+  beach:                    '#fade55',
+  snowy_beach:              '#faf0c0',
+  stony_shore:              '#a2a284',
+  plains:                   '#8db360',
+  sunflower_plains:         '#b5db67',
+  forest:                   '#056621',
+  flower_forest:            '#2d8f00',
+  birch_forest:             '#307444',
+  old_growth_birch_forest:  '#589c6c',
+  dark_forest:              '#40511a',
+  old_growth_pine_taiga:    '#596651',
+  old_growth_spruce_taiga:  '#818e79',
+  taiga:                    '#0b6659',
+  snowy_taiga:              '#31554a',
+  snowy_plains:             '#ffffff',
+  ice_spikes:               '#b4dcdc',
+  jungle:                   '#537b09',
+  sparse_jungle:            '#628b17',
+  bamboo_jungle:            '#768e14',
+  swamp:                    '#07f9b2',
+  mangrove_swamp:           '#2abe4a',
+  mushroom_fields:          '#ff00ff',
+  desert:                   '#fa9418',
+  savanna:                  '#bdb25f',
+  savanna_plateau:          '#a79d64',
+  windswept_savanna:        '#e5da87',
+  badlands:                 '#d94515',
+  eroded_badlands:          '#ff6d3d',
+  wooded_badlands:          '#b09765',
+  meadow:                   '#63a948',
+  cherry_grove:             '#ff97ff',
+  grove:                    '#888888',
+  snowy_slopes:             '#c0c0c0',
+  frozen_peaks:             '#c0d8ff',
+  jagged_peaks:             '#aeaeae',
+  stony_peaks:              '#8f8f8f',
+  windswept_hills:          '#597d72',
+  windswept_gravelly_hills: '#789878',
+  windswept_forest:         '#527a56',
+  river:                    '#1a6b9a',
+  frozen_river:             '#a0c0e0',
+  nether_wastes:            '#bf3b3b',
+  soul_sand_valley:         '#5e3830',
+  basalt_deltas:            '#403636',
+  warped_forest:            '#49907b',
+  crimson_forest:           '#981a1a',
+  the_end:                  '#8080ff',
+  small_end_islands:        '#6060bf',
+  end_midlands:             '#a0a040',
+  end_highlands:            '#c0c040',
+  end_barrens:              '#807050',
+};
+
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return [r,g,b];
+}
+
+function renderStrip(worldSeed, W, H, offsetX, offsetZ, zoom, dimension, layer, stripY, stripH) {
+  const ws = typeof worldSeed === 'bigint' ? worldSeed : BigInt(worldSeed);
+  const buf = new Uint8ClampedArray(W * stripH * 4);
+  const ccx = W / 2, ccz = H / 2;
+  for (let py = 0; py < stripH; py++) {
+    const gy = py + stripY;
+    for (let px = 0; px < W; px++) {
+      const wx = Math.round((px - ccx) / zoom - offsetX);
+      const wz = Math.round((gy - ccz) / zoom - offsetZ);
+      let r, g, b;
+      if (layer === 'height') {
+        const cont = valueNoise(ws, wx, wz, 700) + valueNoise(ws+1n, wx, wz, 200)*0.35 + valueNoise(ws+2n, wx, wz, 60)*0.1;
+        const h = Math.max(0, Math.min(1, cont/1.45));
+        if (h < 0.22)      { r=15; g=Math.round(40+h*250); b=Math.round(80+h*200); }
+        else if (h < 0.30) { r=200; g=185; b=90; }
+        else { const u=(h-0.30)/0.70; r=30+Math.round(160*u); g=130-Math.round(80*u); b=20; if(u>0.85){r=210;g=210;b=210;} }
+      } else if (layer === 'temp') {
+        const t = Math.max(0, Math.min(1, (valueNoise(ws+3n, wx, wz, 900)+valueNoise(ws+4n, wx, wz, 250)*0.3)/1.3));
+        r=Math.round(t*255); g=Math.round(80*(1-Math.abs(t-0.5)*2)); b=Math.round((1-t)*220);
+      } else {
+        const biome = (dimension === 'nether') ? getNetherBiomeAt(ws, wx, wz) : getBiomeAt(ws, wx, wz);
+        [r, g, b] = hexToRgb(BIOME_COLORS[biome] || '#404040');
+      }
+      const i = (py * W + px) * 4;
+      buf[i]=r; buf[i+1]=g; buf[i+2]=b; buf[i+3]=255;
+    }
+  }
+  return buf;
+}
+
+/**
+ * Web Worker — runs seed search off main thread so UI stays responsive
+ */
+let stopped = false;
+
+self.onmessage = function(e) {
+  const { type, payload } = e.data;
+  
+  if (type === 'stop') {
+    stopped = true;
+    return;
+  }
+
+  if (type === 'search') {
+    stopped = false;
+    const {
+      requiredStructs,
+      maxDist,
+      totalSeeds,
+      seedStart,
+      version,
+    } = payload;
+
+    let checked = 0;
+    const BATCH = 200;
+
+    function runBatch() {
+      if (stopped) {
+        self.postMessage({ type: 'done', checked });
+        return;
+      }
+
+      const results = [];
+      const end = Math.min(checked + BATCH, totalSeeds);
+
+      for (let i = checked; i < end; i++) {
+        // Random 64-bit seed
+        const lo = Math.floor(Math.random() * 0xFFFFFFFF);
+        const hi = Math.floor(Math.random() * 0xFFFFFFFF);
+        const seed = BigInt.asIntN(64, (BigInt(hi) << 32n) | BigInt(lo >>> 0));
+
+        const { score, found } = scoreSeed(seed, { requiredStructs, maxDist });
+
+        const meetsRequirements = requiredStructs.length === 0 ||
+          requiredStructs.every(s => found[s] !== undefined);
+
+        if (meetsRequirements || requiredStructs.length === 0) {
+          results.push({
+            seed: seed.toString(),
+            score,
+            found: Object.fromEntries(
+              Object.entries(found).map(([k, v]) => [k, { x: v.x, z: v.z, dist: v.dist }])
+            )
+          });
+        }
+      }
+
+      checked = end;
+      self.postMessage({ type: 'batch', results, checked, total: totalSeeds });
+
+      if (checked < totalSeeds && !stopped) {
+        setTimeout(runBatch, 0);
+      } else {
+        self.postMessage({ type: 'done', checked });
+      }
+    }
+
+    runBatch();
+  }
+
+  if (type === 'render') {
+    const { worldSeed, W, H, offsetX, offsetZ, zoom, dimension, layer, stripY, stripH } = payload;
+    const buf = renderStrip(worldSeed, W, H, offsetX, offsetZ, zoom, dimension, layer, stripY, stripH);
+    self.postMessage({ type:'strip', buf, stripY, stripH, W }, [buf.buffer]);
+    return;
+  }
+
+  if (type === 'analyze') {
+    // Analyze a specific seed
+    const { seed, structureIds, maxDist } = payload;
+    const allStructs = [];
+    
+    for (const structId of structureIds) {
+      if (structId === 'stronghold') {
+        const shs = findStrongholds(BigInt(seed), 9);
+        shs.forEach(s => allStructs.push({ ...s, type: 'stronghold' }));
+        continue;
+      }
+      const pos2 = findStructures(BigInt(seed), structId, Math.ceil(maxDist/16)+10);
+      allStructs.push(...pos2.slice(0, 30));
+  
+    }
+
+    self.postMessage({ type: 'analyzed', structures: allStructs });
+  }
+};
+
+</script>
+
+<script>
+'use strict';
+
+// ─── STRUCT DEFS ──────────────────────────────────────────
+const SD = {
+  village:       {name:'Village',         icon:'🏘',color:'#F4D03F'},
+  desert_temple: {name:'Desert Temple',   icon:'🏛',color:'#E67E22'},
+  jungle_temple: {name:'Jungle Temple',   icon:'🌿',color:'#27AE60'},
+  witch_hut:     {name:'Witch Hut',       icon:'🧙',color:'#8E44AD'},
+  igloo:         {name:'Igloo',           icon:'🧊',color:'#AED6F1'},
+  shipwreck:     {name:'Shipwreck',       icon:'⚓',color:'#5D6D7E'},
+  ocean_ruin:    {name:'Ocean Ruin',      icon:'🐚',color:'#2980B9'},
+  monument:      {name:'Ocean Monument',  icon:'💎',color:'#1ABC9C'},
+  mansion:       {name:'Mansion',         icon:'🏠',color:'#6D4C41'},
+  ruined_portal: {name:'Ruined Portal',   icon:'🌀',color:'#7D3C98'},
+  bastion:       {name:'Bastion',         icon:'🔥',color:'#E74C3C'},
+  fortress:      {name:'Fortress',        icon:'🌋',color:'#C0392B'},
+  stronghold:    {name:'Stronghold',      icon:'🏯',color:'#9B59B6'},
+};
+
+const BC = {ocean:'#1a6b9a',deep_ocean:'#0d4f75',frozen_ocean:'#7aa7be',cold_ocean:'#1a6b8a',lukewarm_ocean:'#45adb5',warm_ocean:'#43d5ee',deep_frozen_ocean:'#5e97b0',deep_cold_ocean:'#155e7a',deep_lukewarm_ocean:'#15a0b0',deep_warm_ocean:'#00c0d5',beach:'#fade55',snowy_beach:'#faf0c0',stony_shore:'#a2a284',plains:'#8db360',sunflower_plains:'#b5db67',forest:'#056621',flower_forest:'#2d8f00',birch_forest:'#307444',old_growth_birch_forest:'#589c6c',dark_forest:'#40511a',old_growth_pine_taiga:'#596651',old_growth_spruce_taiga:'#818e79',taiga:'#0b6659',snowy_taiga:'#31554a',snowy_plains:'#ffffff',ice_spikes:'#b4dcdc',jungle:'#537b09',sparse_jungle:'#628b17',bamboo_jungle:'#768e14',swamp:'#07f9b2',mangrove_swamp:'#2abe4a',mushroom_fields:'#ff00ff',desert:'#fa9418',savanna:'#bdb25f',savanna_plateau:'#a79d64',windswept_savanna:'#e5da87',badlands:'#d94515',eroded_badlands:'#ff6d3d',wooded_badlands:'#b09765',meadow:'#63a948',cherry_grove:'#ff97ff',grove:'#888888',snowy_slopes:'#c0c0c0',frozen_peaks:'#c0d8ff',jagged_peaks:'#aeaeae',stony_peaks:'#8f8f8f',windswept_hills:'#597d72',windswept_gravelly_hills:'#789878',windswept_forest:'#527a56',river:'#1a6b9a',frozen_river:'#a0c0e0',nether_wastes:'#bf3b3b',soul_sand_valley:'#5e3830',basalt_deltas:'#403636',warped_forest:'#49907b',crimson_forest:'#981a1a',the_end:'#8080ff'};
+
+// ─── STATE ────────────────────────────────────────────────
+const S = {
+  ver:'java', seed:null,
+  zoom:2, ox:0, oz:0,
+  drag:false, mx:0, my:0,
+  layer:'biome', dim:'overworld',
+  structs:[], results:[], searching:false,
+};
+
+// ─── WORKER FACTORY ──────────────────────────────────────
+function mkW() {
+  const src = document.getElementById('wsrc').textContent;
+  return new Worker(URL.createObjectURL(new Blob([src], {type:'application/javascript'})));
+}
+
+// ─── CANVAS ──────────────────────────────────────────────
+const cv = document.getElementById('mc');
+const cx2 = cv.getContext('2d');
+let rW = null, rID = 0, pRender = null;
+
+function resize() {
+  const ma = document.getElementById('ma');
+  const tb = document.getElementById('mtb');
+  cv.width  = ma.clientWidth;
+  cv.height = ma.clientHeight - tb.clientHeight;
+  if (S.seed !== null) sched();
+}
+
+function sched() {
+  if (pRender) return;
+  pRender = requestAnimationFrame(render);
+}
+
+function render() {
+  pRender = null;
+  if (S.seed === null) return;
+  if (rW) rW.terminate();
+  rW = mkW();
+  const rid = ++rID;
+  const W = cv.width, H = cv.height;
+  const STRIP = 40;
+  let y = 0;
+  document.getElementById('rp').style.display = 'block';
+  document.getElementById('rb').style.width = '0%';
+
+  function send() {
+    if (y >= H) {
+      document.getElementById('rp').style.display = 'none';
+      rW.terminate(); rW = null;
+      drawMarkers();
+      return;
+    }
+    const sh = Math.min(STRIP, H - y);
+    rW.postMessage({type:'render', payload:{
+      worldSeed: S.seed.toString(), W, H,
+      offsetX:S.ox, offsetZ:S.oz, zoom:S.zoom,
+      dimension:S.dim, layer:S.layer,
+      stripY:y, stripH:sh,
+    }});
+    y += sh;
+  }
+
+  rW.onmessage = e => {
+    if (e.data.type !== 'strip' || rID !== rid) return;
+    const {buf, stripY:sy, stripH:sh, W:w} = e.data;
+    cx2.putImageData(new ImageData(new Uint8ClampedArray(buf), w, sh), 0, sy);
+    document.getElementById('rb').style.width = Math.round((sy+sh)/H*100)+'%';
+    send();
+  };
+  send();
+}
+
+function drawMarkers() {
+  const W = cv.width, H = cv.height, ccx = W/2, ccz = H/2;
+  // Spawn cross
+  cx2.save(); cx2.strokeStyle='#fff'; cx2.lineWidth=1.5; cx2.globalAlpha=.65;
+  const sx=ccx+S.ox*S.zoom, sz=ccz+S.oz*S.zoom;
+  cx2.beginPath(); cx2.moveTo(sx-8,sz); cx2.lineTo(sx+8,sz); cx2.moveTo(sx,sz-8); cx2.lineTo(sx,sz+8); cx2.stroke();
+  cx2.restore();
+  // Structures
+  S.structs.forEach(s => {
+    const px=ccx+(s.x+S.ox)*S.zoom, pz=ccz+(s.z+S.oz)*S.zoom;
+    if (px<-20||px>W+20||pz<-20||pz>H+20) return;
+    const def=SD[s.type]; if(!def) return;
+    const r=Math.max(3,Math.min(9,S.zoom*2.5));
+    const g=cx2.createRadialGradient(px,pz,0,px,pz,r*2.5);
+    g.addColorStop(0,def.color+'99'); g.addColorStop(1,def.color+'00');
+    cx2.fillStyle=g; cx2.beginPath(); cx2.arc(px,pz,r*2.5,0,Math.PI*2); cx2.fill();
+    cx2.fillStyle=def.color; cx2.strokeStyle='#000'; cx2.lineWidth=1;
+    cx2.beginPath(); cx2.arc(px,pz,r,0,Math.PI*2); cx2.fill(); cx2.stroke();
+    if (S.zoom>=5) {
+      cx2.font=`${Math.floor(r*1.6)}px serif`;
+      cx2.textAlign='center'; cx2.textBaseline='middle';
+      cx2.fillText(def.icon,px,pz);
+    }
+  });
+}
+
+// ─── CANVAS EVENTS ───────────────────────────────────────
+cv.addEventListener('mousedown', e=>{S.drag=true;S.mx=e.clientX;S.my=e.clientY;});
+cv.addEventListener('mousemove', e=>{
+  if(S.drag){S.ox+=(e.clientX-S.mx)/S.zoom;S.oz+=(e.clientY-S.my)/S.zoom;S.mx=e.clientX;S.my=e.clientY;sched();}
+  updCoords(e); chkHover(e);
+});
+cv.addEventListener('mouseup',   ()=>S.drag=false);
+cv.addEventListener('mouseleave',()=>{S.drag=false;document.getElementById('tt').style.display='none';});
+cv.addEventListener('wheel', e=>{e.preventDefault();doZ(e.deltaY<0?1.2:1/1.2);},{passive:false});
+let ltd=0;
+cv.addEventListener('touchstart',e=>{e.preventDefault();if(e.touches.length===1){S.drag=true;S.mx=e.touches[0].clientX;S.my=e.touches[0].clientY;}if(e.touches.length===2)ltd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);},{passive:false});
+cv.addEventListener('touchmove',e=>{e.preventDefault();if(e.touches.length===1&&S.drag){S.ox+=(e.touches[0].clientX-S.mx)/S.zoom;S.oz+=(e.touches[0].clientY-S.my)/S.zoom;S.mx=e.touches[0].clientX;S.my=e.touches[0].clientY;sched();}if(e.touches.length===2){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(ltd)doZ(d/ltd);ltd=d;}},{passive:false});
+cv.addEventListener('touchend',()=>{S.drag=false;ltd=0;});
+
+function doZ(f){S.zoom=Math.max(.5,Math.min(64,S.zoom*f));document.getElementById('zl').textContent=S.zoom.toFixed(1)+'×';sched();}
+function rstV(){S.ox=0;S.oz=0;S.zoom=2;document.getElementById('zl').textContent='2.0×';sched();}
+
+function updCoords(e){
+  const r=cv.getBoundingClientRect();
+  const px=e.clientX-r.left, py=e.clientY-r.top;
+  document.getElementById('cx').textContent=Math.round((px-cv.width/2)/S.zoom-S.ox);
+  document.getElementById('cz').textContent=Math.round((py-cv.height/2)/S.zoom-S.oz);
+}
+
+function chkHover(e){
+  const r=cv.getBoundingClientRect();
+  const px=e.clientX-r.left, py=e.clientY-r.top;
+  const ccx=cv.width/2, ccz=cv.height/2;
+  const tt=document.getElementById('tt');
+  let hit=null;
+  for(const s of S.structs){
+    const spx=ccx+(s.x+S.ox)*S.zoom, spz=ccz+(s.z+S.oz)*S.zoom;
+    if(Math.hypot(px-spx,py-spz)<12){hit=s;break;}
+  }
+  if(hit){
+    const def=SD[hit.type]||{name:hit.type,icon:'📍',color:'#aaa'};
+    tt.innerHTML=`<span style="color:${def.color};font-weight:700">${def.icon} ${def.name}</span><br><span style="color:#4a5a6e">X: ${hit.x}  Z: ${hit.z}</span><br><span style="color:#ff6b35">⟳ ${hit.dist} blocks</span>`;
+    tt.style.left=(px+14)+'px'; tt.style.top=(py-8)+'px'; tt.style.display='block';
+    cv.style.cursor='pointer';
+  } else {
+    tt.style.display='none'; cv.style.cursor='crosshair';
+  }
+}
+
+// ─── LAYER ───────────────────────────────────────────────
+function setL(btn,layer){
+  document.querySelectorAll('.lb').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  S.layer=layer==='struct'?'biome':layer;
+  document.getElementById('ls').value=S.layer;
+  sched();
+}
+function onLC(){S.layer=document.getElementById('ls').value;document.querySelectorAll('.lb').forEach(b=>b.classList.toggle('on',b.dataset.layer===S.layer));sched();}
+function onDC(){S.dim=document.getElementById('ds').value;sched();}
+
+// ─── SEED ────────────────────────────────────────────────
+function parseSeed(raw){
+  raw=raw.trim();
+  // Pure numeric (including negative)?
+  if(/^-?\d+$/.test(raw)){
+    try{return BigInt(raw);}catch(e){}
+  }
+  // Minecraft-style string hash
+  let h=0n;
+  for(let i=0;i<raw.length;i++) h=BigInt.asIntN(64,h*31n+BigInt(raw.charCodeAt(i)));
+  return h;
+}
+
+function doLoad(){
+  const v=document.getElementById('si').value.trim();
+  if(!v){notif('Enter a seed first');return;}
+  loadSeed(parseSeed(v));
+}
+
+function doRand(){
+  const lo=(Math.random()*0xFFFFFFFF)|0;
+  const hi=(Math.random()*0x7FFFFFFF)|0;
+  const seed=BigInt.asIntN(64,(BigInt(hi)<<32n)|BigInt(lo>>>0));
+  document.getElementById('si').value=seed.toString();
+  loadSeed(seed);
+}
+
+function doCopy(){
+  const v=document.getElementById('si').value||( S.seed?S.seed.toString():'' );
+  if(!v){notif('No seed');return;}
+  navigator.clipboard.writeText(v).then(()=>notif('Copied: '+v));
+}
+
+function doShare(){
+  const url=new URL(location.href);
+  if(S.seed!==null) url.searchParams.set('seed',S.seed.toString());
+  navigator.clipboard.writeText(url.href).then(()=>notif('URL copied!'));
+}
+
+function loadSeed(seed){
+  S.seed=seed; S.structs=[];
+  document.getElementById('sd').textContent='SEED: '+seed.toString();
+  document.getElementById('si').value=seed.toString();
+  document.getElementById('me').style.display='none';
+  document.getElementById('bl').style.display='block';
+  const url=new URL(location.href);
+  url.searchParams.set('seed',seed.toString());
+  history.replaceState(null,'',url);
+  rstV();
+  doAnalyze(seed);
+}
+
+// ─── ANALYZE ─────────────────────────────────────────────
+function doAnalyze(seed){
+  const maxD=Math.max(parseInt(document.getElementById('dr').value),2000);
+  const w=mkW();
+  w.postMessage({type:'analyze',payload:{
+    worldSeed:seed.toString(),
+    structureIds:Object.keys(SD),
+    maxDist:maxD,
+  }});
+  w.onmessage=e=>{
+    if(e.data.type==='analyzed'){
+      S.structs=e.data.structures;
+      w.terminate();
+      updSP();
+      sched();
+    }
+  };
+}
+
+function updSP(){
+  const panel=document.getElementById('sp');
+  const list=document.getElementById('sl2');
+  const near={};
+  for(const s of S.structs){if(!near[s.type]||s.dist<near[s.type].dist)near[s.type]=s;}
+  const items=Object.values(near).sort((a,b)=>a.dist-b.dist);
+  if(!items.length){panel.style.display='none';return;}
+  panel.style.display='block';
+  list.innerHTML=items.map(s=>{
+    const def=SD[s.type]||{name:s.type,icon:'📍',color:'#aaa'};
+    return `<div class="spi" onclick="focusS(${s.x},${s.z})" title="Click to zoom">
+      <div class="spd" style="background:${def.color}"></div>
+      <div class="spn">${def.icon} ${def.name}</div>
+      <div class="spc">${s.x},${s.z}</div>
+      <div class="spdi">${s.dist}m</div>
+    </div>`;
+  }).join('');
+}
+
+function focusS(x,z){S.ox=-x;S.oz=-z;S.zoom=8;document.getElementById('zl').textContent='8.0×';sched();}
+
+// ─── SEARCH ──────────────────────────────────────────────
+let sw=null;
+
+function toggle(){
+  const v=document.getElementById('si').value.trim();
+  if(v){loadSeed(parseSeed(v));return;}
+  if(S.searching){stopSearch();return;}
+  startSearch();
+}
+
+function startSearch(){
+  const reqs=[...document.querySelectorAll('#sg input:checked')].map(i=>i.value);
+  const maxD=parseInt(document.getElementById('dr').value);
+  const tot=parseInt(document.getElementById('tr').value);
+  S.searching=true; S.results=[];
+  document.getElementById('rl').innerHTML='';
+  setRC(0);
+  const btn=document.getElementById('sbtn');
+  btn.textContent='⏹ Stop';
+  btn.classList.add('srch');
+  document.getElementById('pw').classList.add('on');
+  if(sw)sw.terminate();
+  sw=mkW();
+  sw.postMessage({type:'search',payload:{requiredStructs:reqs,maxDist:maxD,totalSeeds:tot}});
+  sw.onmessage=e=>{
+    const{type,results,checked,total}=e.data;
+    if(type==='batch'){
+      results.forEach(r=>{S.results.push(r);addRI(r);});
+      setRC(S.results.length);
+      const p=Math.round(checked/total*100);
+      document.getElementById('pb').style.width=p+'%';
+      document.getElementById('ptx').textContent=`CHECKING ${checked.toLocaleString()} / ${total.toLocaleString()} · FOUND ${S.results.length}`;
+    }
+    if(type==='done') finSearch();
+  };
+}
+
+function stopSearch(){if(sw){sw.postMessage({type:'stop'});sw.terminate();sw=null;}finSearch();}
+
+function finSearch(){
+  S.searching=false;
+  const btn=document.getElementById('sbtn');
+  btn.textContent='⚡ Find Seeds'; btn.classList.remove('srch');
+  if(S.results.length>0&&S.seed===null){
+    const best=S.results.sort((a,b)=>b.score-a.score)[0];
+    loadSeed(parseSeed(best.seed));
+  }
+  notif(`Done — ${S.results.length} seeds found`);
+}
+
+function addRI(r){
+  const l=document.getElementById('rl');
+  const d=document.createElement('div');
+  d.className='ri';
+  const tags=Object.entries(r.found).slice(0,4).map(([k,v])=>{
+    const def=SD[k]; return `<span class="rtag">${def?def.icon:''} ${v.dist}m</span>`;
+  }).join('');
+  d.innerHTML=`<div class="rs">${r.seed}</div><div class="rt">${tags}</div><div class="rscore">★${r.score}</div>`;
+  d.addEventListener('click',()=>{
+    document.querySelectorAll('.ri').forEach(i=>i.classList.remove('on'));
+    d.classList.add('on');
+    document.getElementById('si').value=r.seed;
+    loadSeed(parseSeed(r.seed));
+  });
+  l.appendChild(d);
+}
+
+function setRC(n){document.getElementById('rc').innerHTML=`RESULTS: <strong>${n}</strong> found`;}
+
+// ─── EXPORT ──────────────────────────────────────────────
+function doExp(){
+  if(!S.results.length){notif('No results');return;}
+  const data=S.results.map(r=>({seed:r.seed,score:r.score,
+    structures:Object.entries(r.found).map(([k,v])=>`${k} @ ${v.x},${v.z} (${v.dist}m)`)}));
+  const a=document.createElement('a');
+  a.href='data:application/json,'+encodeURIComponent(JSON.stringify(data,null,2));
+  a.download=`seedscout_${Date.now()}.json`;
+  a.click();
+}
+
+// ─── VERSION ─────────────────────────────────────────────
+function setVer(v){
+  S.ver=v;
+  document.getElementById('bjv').className='vbtn'+(v==='java'?' oj':'');
+  document.getElementById('bbk').className='vbtn'+(v==='bedrock'?' ob':'');
+  notif(v==='bedrock'?'Bedrock: partial structure support (salts differ)':'Java: full algorithm active');
+}
+
+// ─── STRUCT GRID ─────────────────────────────────────────
+function buildSG(){
+  const g=document.getElementById('sg');
+  for(const[id,def]of Object.entries(SD)){
+    const l=document.createElement('label');
+    l.className='si';
+    l.innerHTML=`<input type="checkbox" value="${id}"><span class="si-icon">${def.icon}</span><span>${def.name}</span>`;
+    const cb=l.querySelector('input');
+    cb.addEventListener('change',()=>l.classList.toggle('on',cb.checked));
+    g.appendChild(l);
+  }
+}
+
+// ─── LEGEND ──────────────────────────────────────────────
+function buildLegend(){
+  document.getElementById('blc').innerHTML=
+    Object.entries(BC).map(([n,c])=>
+      `<div class="blr"><div class="bls" style="background:${c}"></div><span class="bln">${n.replace(/_/g,' ')}</span></div>`
+    ).join('');
+}
+
+// ─── NOTIF ───────────────────────────────────────────────
+function notif(msg){
+  const n=document.getElementById('nt');
+  n.textContent=msg; n.classList.add('on');
+  clearTimeout(n._t); n._t=setTimeout(()=>n.classList.remove('on'),2600);
+}
+
+// ─── KEYBOARD ────────────────────────────────────────────
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
+  if(e.key==='r') doRand();
+  if(e.key===' '){e.preventDefault();toggle();}
+  if(e.key==='='||e.key==='+') doZ(1.5);
+  if(e.key==='-') doZ(1/1.5);
+  if(e.key==='0') rstV();
+});
+
+// ─── INIT ────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded',()=>{
+  buildSG(); buildLegend(); resize();
+  const p=new URLSearchParams(location.search);
+  const sp=p.get('seed');
+  if(sp){ setTimeout(()=>{document.getElementById('si').value=sp;loadSeed(parseSeed(sp));},100); }
+  else   { setTimeout(doRand,200); }
+});
+window.addEventListener('resize', resize);
+</script>
+</body>
+</html>
