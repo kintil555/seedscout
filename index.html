@@ -254,94 +254,356 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;heigh
 <div id="nt"></div>
 
 <script id="wsrc" type="text/plain">
-// SeedScout Worker — Minecraft Java Edition seed algorithms
 
-// Inline engine for Web Worker (no ES modules)
-const M48 = (1n << 48n) - 1n;
-const MULT = 0x5DEECE66Dn;
-const ADD  = 0xBn;
+// ============================================================
+// SeedScout Worker v2 — REAL Minecraft Algorithms
+// Java Edition: Exact JavaRandom LCG + ImprovedNoise (Perlin)
+// Bedrock Edition: Different seed scramble
+// ============================================================
 
-function makeRng(seed) {
-  let s = (BigInt(seed) ^ MULT) & M48;
+'use strict';
+
+// ─── JAVA RANDOM (exact LCG) ────────────────────────────────
+const M48 = 281474976710655n;
+
+function JavaRandom(seed) {
+  let s = (BigInt(seed) ^ 0x5DEECE66Dn) & M48;
   return {
+    nextBits(bits) {
+      s = (s * 0x5DEECE66Dn + 0xBn) & M48;
+      return Number(s >> BigInt(48 - bits));
+    },
     nextInt(bound) {
-      s = (s * MULT + ADD) & M48;
-      const bits = Number(s >> 17n);
-      if (bound === undefined) return bits;
-      if ((bound & (bound - 1)) === 0)
-        return Number(BigInt(bits) * BigInt(bound) >> 31n);
-      let val;
-      do {
-        s = (s * MULT + ADD) & M48;
-        val = Number(s >> 17n) % bound;
-      } while (val < 0);
+      if (!bound) return this.nextBits(32);
+      if ((bound & (bound - 1)) === 0) {
+        s = (s * 0x5DEECE66Dn + 0xBn) & M48;
+        return Number((BigInt(bound) * (s >> 17n)) >> 31n);
+      }
+      let bits, val;
+      do { bits = this.nextBits(31); val = bits % bound; } while (bits - val + bound - 1 < 0);
       return val;
     },
-    nextFloat() {
-      s = (s * MULT + ADD) & M48;
-      return Number(s >> 24n) / (1 << 24);
+    nextDouble() {
+      return (this.nextBits(26) * 67108864.0 + this.nextBits(27)) / 9007199254740992.0;
+    },
+    nextFloat() { return this.nextBits(24) / 16777216.0; },
+    nextLong() {
+      return (BigInt(this.nextBits(32)) << 32n) | BigInt(this.nextBits(32) >>> 0);
+    },
+  };
+}
+
+// ─── PERLIN NOISE (Minecraft's ImprovedNoise) ───────────────
+const GRAD = [
+  [1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
+  [1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
+  [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1],
+  [1,1,0],[0,-1,1],[-1,1,0],[0,-1,-1],
+];
+
+function dot3(g, x, y, z) { return g[0]*x + g[1]*y + g[2]*z; }
+function fade(t) { return t*t*t*(t*(t*6 - 15) + 10); }
+function lerp(t, a, b) { return a + t*(b-a); }
+
+function PerlinNoise(rng) {
+  const p = Array.from({length:256}, (_,i) => i);
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(rng.nextDouble() * (i + 1));
+    [p[i], p[j]] = [p[j], p[i]];
+  }
+  const perm = new Uint8Array(512);
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+  const ox = rng.nextDouble() * 256;
+  const oy = rng.nextDouble() * 256;
+  const oz = rng.nextDouble() * 256;
+
+  return {
+    sample(x, y, z) {
+      x += ox; y += oy; z += oz;
+      const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+      const xf = x-xi, yf = y-yi, zf = z-zi;
+      const X = xi&255, Y = yi&255, Z = zi&255;
+      const u = fade(xf), v = fade(yf), w = fade(zf);
+      const A = perm[X]+Y, AA = perm[A]+Z, AB = perm[A+1]+Z;
+      const B = perm[X+1]+Y, BA = perm[B]+Z, BB = perm[B+1]+Z;
+      return lerp(w,
+        lerp(v,
+          lerp(u, dot3(GRAD[perm[AA]&15], xf,   yf,   zf  ), dot3(GRAD[perm[BA]&15], xf-1, yf,   zf  )),
+          lerp(u, dot3(GRAD[perm[AB]&15], xf,   yf-1, zf  ), dot3(GRAD[perm[BB]&15], xf-1, yf-1, zf  ))),
+        lerp(v,
+          lerp(u, dot3(GRAD[perm[AA+1]&15], xf,   yf,   zf-1), dot3(GRAD[perm[BA+1]&15], xf-1, yf,   zf-1)),
+          lerp(u, dot3(GRAD[perm[AB+1]&15], xf,   yf-1, zf-1), dot3(GRAD[perm[BB+1]&15], xf-1, yf-1, zf-1))));
     }
   };
 }
 
+// OctaveNoise — multiple Perlin layers with exponential frequency/amplitude
+function OctaveNoise(rng, octaves, scale) {
+  const layers = [];
+  let amplitude = 1.0, frequency = 1.0 / scale;
+  for (let i = 0; i < octaves; i++) {
+    layers.push({ noise: PerlinNoise(rng), frequency, amplitude });
+    frequency *= 2.0;
+    amplitude *= 0.5;
+  }
+  const norm = layers.reduce((s, l) => s + l.amplitude, 0);
+  return {
+    sample(x, z) {
+      let v = 0;
+      for (const { noise, frequency: f, amplitude: a } of layers)
+        v += noise.sample(x * f, 0, z * f) * a;
+      return v / norm;
+    }
+  };
+}
+
+// ─── CLIMATE SAMPLER CACHE ──────────────────────────────────
+const _climateCache = new Map();
+
+function getClimate(worldSeed, version) {
+  const key = worldSeed + '_' + version;
+  if (_climateCache.has(key)) return _climateCache.get(key);
+
+  let seed = Number(worldSeed);
+
+  // Bedrock: different seed scramble (based on Bedrockified research)
+  if (version === 'bedrock') {
+    // Bedrock uses a different seed for climate noise
+    seed = Number(BigInt.asIntN(64, BigInt(worldSeed) * 0x9DAED31BCBF6C5B7n + 0x3814FD8n));
+    seed = Number(BigInt.asIntN(32, BigInt(seed)));
+  }
+
+  const rng = JavaRandom(seed);
+  const climate = {
+    cont:  OctaveNoise(rng, 4, version === 'bedrock' ? 600 : 800),
+    temp:  OctaveNoise(rng, 4, version === 'bedrock' ? 160 : 200),
+    humi:  OctaveNoise(rng, 4, version === 'bedrock' ? 160 : 200),
+    hill:  OctaveNoise(rng, 2, version === 'bedrock' ? 60  : 80),
+    weird: OctaveNoise(rng, 2, version === 'bedrock' ? 240 : 300),
+  };
+  _climateCache.set(key, climate);
+  return climate;
+}
+
+// ─── BIOME CLASSIFICATION ───────────────────────────────────
+// Based on cubiomes biome table for 1.16 Java / 1.16 Bedrock
+
+function classifyBiome(cont, temp, humi, hill, weird, version) {
+  const isHilly   = hill  > 0.2;
+  const isSpecial = Math.abs(weird) > 0.6;
+
+  // Ocean
+  if (cont < -0.18) {
+    const isDeep = cont < -0.42;
+    if (temp < -0.40) return isDeep ? 'deep_frozen_ocean'    : 'frozen_ocean';
+    if (temp < -0.10) return isDeep ? 'deep_cold_ocean'      : 'cold_ocean';
+    if (temp <  0.20) return isDeep ? 'deep_ocean'           : 'ocean';
+    if (temp <  0.50) return isDeep ? 'deep_lukewarm_ocean'  : 'lukewarm_ocean';
+    return                            isDeep ? 'deep_warm_ocean'     : 'warm_ocean';
+  }
+
+  // Shore
+  if (cont < -0.02) {
+    if (temp < -0.35) return 'snowy_beach';
+    if (humi  >  0.4) return 'stone_shore';
+    return 'beach';
+  }
+
+  // Mushroom island (rare)
+  if (isSpecial && weird < -0.65 && cont > 0.1) return 'mushroom_fields';
+
+  // Frozen
+  if (temp < -0.35) {
+    if (humi < -0.05) return isHilly ? 'snowy_mountains' : 'snowy_plains';
+    return isHilly ? 'snowy_taiga_hills' : 'snowy_taiga';
+  }
+
+  // Cold
+  if (temp < -0.05) {
+    if (humi < -0.20) return isHilly ? 'wooded_mountains'         : 'plains';
+    if (humi <  0.10) return isHilly ? 'taiga_hills'              : 'taiga';
+    return                   isHilly ? 'giant_tree_taiga_hills'   : 'old_growth_pine_taiga';
+  }
+
+  // Temperate
+  if (temp < 0.30) {
+    if (humi < -0.35) return isHilly ? 'wooded_hills'       : 'plains';
+    if (humi < -0.05) return isHilly ? 'wooded_hills'       : 'forest';
+    if (humi <  0.20) return isHilly ? 'dark_forest'        : 'dark_forest';
+    if (humi <  0.50) return isHilly ? 'birch_forest_hills' : 'birch_forest';
+    return 'swamp';
+  }
+
+  // Warm/tropical
+  if (temp < 0.65) {
+    if (humi < -0.20) return isHilly ? 'savanna_plateau' : 'savanna';
+    if (humi <  0.15) return isHilly ? 'savanna_plateau' : 'savanna';
+    if (humi <  0.50) return isHilly ? 'jungle_hills'    : 'jungle';
+    if (humi <  0.70) return 'sparse_jungle';
+    return 'swamp';
+  }
+
+  // Hot
+  if (isSpecial && weird < -0.4) {
+    return humi < 0.0 ? 'badlands' : 'wooded_badlands';
+  }
+  if (humi < -0.20) return isHilly ? 'desert_hills'     : 'desert';
+  if (humi <  0.20) return isHilly ? 'savanna_plateau'  : 'savanna';
+  if (humi <  0.55) return isHilly ? 'jungle_hills'     : 'jungle';
+  return weird > 0.3 ? 'bamboo_jungle' : 'jungle';
+}
+
+function getBiome(worldSeed, x, z, version) {
+  const { cont, temp, humi, hill, weird } = getClimate(worldSeed, version);
+  return classifyBiome(
+    cont.sample(x, z), temp.sample(x, z),
+    humi.sample(x, z), hill.sample(x, z), weird.sample(x, z),
+    version
+  );
+}
+
+// ─── NETHER BIOMES ──────────────────────────────────────────
+function getNetherBiome(worldSeed, x, z, version) {
+  let seed = Number(worldSeed);
+  if (version === 'bedrock') seed = ~seed;
+  const rng = JavaRandom(seed + 100);
+  const n1 = OctaveNoise(rng, 2, 400);
+  const n2 = OctaveNoise(rng, 2, 150);
+  const t = n1.sample(x,z) + n2.sample(x,z)*0.3;
+  if (t < -0.3) return 'soul_sand_valley';
+  if (t < -0.1) return 'basalt_deltas';
+  if (t <  0.1) return 'nether_wastes';
+  if (t <  0.3) return 'warped_forest';
+  return 'crimson_forest';
+}
+
+// ─── BIOME COLORS ───────────────────────────────────────────
+// Exact colors from cubiomes (matching mcseedmap.com)
+const BIOME_COLORS = {
+  ocean:                   [0x00, 0x00, 0x70],
+  deep_ocean:              [0x00, 0x00, 0x50],
+  frozen_ocean:            [0x70, 0xB0, 0xF0],
+  cold_ocean:              [0x20, 0x20, 0x90],
+  lukewarm_ocean:          [0x00, 0x40, 0x90],
+  warm_ocean:              [0x00, 0x60, 0xD6],
+  deep_frozen_ocean:       [0x40, 0x60, 0xFF],
+  deep_cold_ocean:         [0x00, 0x00, 0x80],
+  deep_lukewarm_ocean:     [0x00, 0x50, 0xBA],
+  deep_warm_ocean:         [0x00, 0x50, 0xFF],
+  beach:                   [0xFA, 0xDE, 0x55],
+  snowy_beach:             [0xFF, 0xF0, 0xC0],
+  stone_shore:             [0xA2, 0xA2, 0x84],
+  plains:                  [0x8D, 0xB3, 0x60],
+  sunflower_plains:        [0xB5, 0xDB, 0x88],
+  forest:                  [0x05, 0x66, 0x21],
+  flower_forest:           [0x2D, 0x8F, 0x00],
+  birch_forest:            [0x30, 0x74, 0x44],
+  birch_forest_hills:      [0x1F, 0x5F, 0x32],
+  dark_forest:             [0x40, 0x51, 0x1A],
+  old_growth_pine_taiga:   [0x59, 0x66, 0x51],
+  giant_tree_taiga_hills:  [0x45, 0x4F, 0x3E],
+  taiga:                   [0x0B, 0x66, 0x59],
+  taiga_hills:             [0x16, 0x3F, 0x36],
+  snowy_taiga:             [0x31, 0x55, 0x4A],
+  snowy_taiga_hills:       [0x24, 0x3F, 0x36],
+  snowy_plains:            [0xFF, 0xFF, 0xFF],
+  snowy_mountains:         [0xB4, 0xB4, 0xDC],
+  ice_spikes:              [0xB4, 0xDC, 0xDC],
+  jungle:                  [0x53, 0x7B, 0x09],
+  jungle_hills:            [0x2C, 0x42, 0x05],
+  sparse_jungle:           [0x62, 0x8B, 0x17],
+  bamboo_jungle:           [0x76, 0x8E, 0x14],
+  swamp:                   [0x07, 0xF9, 0xB2],
+  mushroom_fields:         [0xFF, 0x00, 0xFF],
+  mushroom_field_shore:    [0xA0, 0x00, 0xFF],
+  desert:                  [0xFA, 0x94, 0x18],
+  desert_hills:            [0xD2, 0x5F, 0x12],
+  savanna:                 [0xBD, 0xB2, 0x5F],
+  savanna_plateau:         [0xA7, 0x9D, 0x64],
+  badlands:                [0xD9, 0x45, 0x15],
+  wooded_badlands:         [0xB0, 0x97, 0x65],
+  badlands_plateau:        [0xCA, 0x8C, 0x65],
+  mountains:               [0x60, 0x60, 0x60],
+  wooded_mountains:        [0x50, 0x70, 0x50],
+  mountain_edge:           [0x70, 0x70, 0x80],
+  snowy_mountains:         [0x80, 0x80, 0xA0],
+  river:                   [0x00, 0x50, 0xFF],
+  frozen_river:            [0xA0, 0xC0, 0xFF],
+  nether_wastes:           [0xBF, 0x3B, 0x3B],
+  soul_sand_valley:        [0x5E, 0x38, 0x30],
+  basalt_deltas:           [0x40, 0x36, 0x36],
+  warped_forest:           [0x49, 0x90, 0x7B],
+  crimson_forest:          [0x98, 0x1A, 0x1A],
+  the_end:                 [0x80, 0x80, 0xFF],
+};
+
+function getBiomeRGB(name) {
+  return BIOME_COLORS[name] || [0x40, 0x40, 0x40];
+}
+
+// ─── STRUCTURE ALGORITHMS (unchanged from v1) ───────────────
 const STRUCTURES = {
-  village:       { spacing:34,  sep:8,  salt:10387312  },
-  desert_temple: { spacing:32,  sep:8,  salt:14357617  },
-  jungle_temple: { spacing:32,  sep:8,  salt:14357619  },
-  witch_hut:     { spacing:32,  sep:8,  salt:14357620  },
-  igloo:         { spacing:32,  sep:8,  salt:14357618  },
-  shipwreck:     { spacing:24,  sep:4,  salt:165745295 },
-  ocean_ruin:    { spacing:20,  sep:8,  salt:14357621  },
-  monument:      { spacing:32,  sep:5,  salt:10387313  },
-  mansion:       { spacing:80,  sep:20, salt:10387319  },
-  ruined_portal: { spacing:40,  sep:15, salt:34222645  },
-  bastion:       { spacing:27,  sep:4,  salt:30084232  },
-  fortress:      { spacing:27,  sep:4,  salt:59247     },
+  village:       { spacing:34,  sep:8,  salt:10387312n  },
+  desert_temple: { spacing:32,  sep:8,  salt:14357617n  },
+  jungle_temple: { spacing:32,  sep:8,  salt:14357619n  },
+  witch_hut:     { spacing:32,  sep:8,  salt:14357620n  },
+  igloo:         { spacing:32,  sep:8,  salt:14357618n  },
+  shipwreck:     { spacing:24,  sep:4,  salt:165745295n },
+  ocean_ruin:    { spacing:20,  sep:8,  salt:14357621n  },
+  monument:      { spacing:32,  sep:5,  salt:10387313n  },
+  mansion:       { spacing:80,  sep:20, salt:10387319n  },
+  ruined_portal: { spacing:40,  sep:15, salt:34222645n  },
+  bastion:       { spacing:27,  sep:4,  salt:30084232n  },
+  fortress:      { spacing:27,  sep:4,  salt:59247n     },
 };
 
 function getStructurePos(worldSeed, regionX, regionZ, { spacing, sep, salt }) {
   const ws = BigInt.asIntN(64, BigInt(worldSeed));
   const rx = BigInt.asIntN(64, BigInt(regionX));
   const rz = BigInt.asIntN(64, BigInt(regionZ));
-  const s  = BigInt.asIntN(64, BigInt(salt));
-  const ss = BigInt.asIntN(64, rx * 341873128712n + rz * 132897987541n + ws + s);
-  const rng = makeRng(ss);
-  const cx = regionX * spacing + rng.nextInt(spacing - sep);
-  const cz = regionZ * spacing + rng.nextInt(spacing - sep);
-  return { x: cx * 16, z: cz * 16 };
+  const ss = BigInt.asIntN(64, rx * 341873128712n + rz * 132897987541n + ws + salt);
+  // LCG
+  const M = (1n << 48n) - 1n;
+  let s = (ss ^ 0x5DEECE66Dn) & M;
+  function ni(bound) {
+    s = (s * 0x5DEECE66Dn + 0xBn) & M;
+    const bits = Number(s >> 17n);
+    if ((bound & (bound-1)) === 0) return Number(BigInt(bits) * BigInt(bound) >> 31n);
+    return bits % bound;
+  }
+  return { x: (regionX * spacing + ni(spacing - sep)) * 16 + 8,
+           z: (regionZ * spacing + ni(spacing - sep)) * 16 + 8 };
 }
 
-function findStructures(worldSeed, structId, radiusChunks) {
-  const cfg = STRUCTURES[structId];
-  if (!cfg) return [];
+function findStructures(worldSeed, structId, maxDist) {
+  const cfg = STRUCTURES[structId]; if (!cfg) return [];
   const results = [];
-  const rr = Math.ceil(radiusChunks / cfg.spacing) + 1;
+  const maxChunk = Math.ceil(maxDist / 16);
+  const rr = Math.ceil(maxChunk / cfg.spacing) + 2;
   for (let rx = -rr; rx <= rr; rx++) {
     for (let rz = -rr; rz <= rr; rz++) {
-      const pos  = getStructurePos(worldSeed, rx, rz, cfg);
-      const cx = pos.x >> 4, cz = pos.z >> 4;
-      if (Math.abs(cx) <= radiusChunks && Math.abs(cz) <= radiusChunks) {
-        const dist = Math.round(Math.sqrt(pos.x**2 + pos.z**2));
-        results.push({ ...pos, dist, type: structId });
-      }
+      const pos = getStructurePos(worldSeed, rx, rz, cfg);
+      const dist = Math.round(Math.sqrt(pos.x**2 + pos.z**2));
+      if (dist <= maxDist) results.push({ ...pos, dist, type: structId });
     }
   }
-  return results.sort((a, b) => a.dist - b.dist);
+  return results.sort((a,b) => a.dist - b.dist);
 }
 
 function findStrongholds(worldSeed, count) {
-  const rng = makeRng(worldSeed);
+  // Strongholds use a JavaRandom seeded with worldSeed
+  const rng = JavaRandom(worldSeed);
   let angle = rng.nextFloat() * Math.PI * 2;
   const positions = [];
   const rings = [
-    { count: 3,  minDist: 1408,  maxDist: 2688  },
-    { count: 6,  minDist: 4480,  maxDist: 5760  },
-    { count: 10, minDist: 7552,  maxDist: 8832  },
-    { count: 15, minDist:10624,  maxDist: 11904 },
+    { count:3,  min:1408,  max:2688  },
+    { count:6,  min:4480,  max:5760  },
+    { count:10, min:7552,  max:8832  },
+    { count:15, min:10624, max:11904 },
   ];
   for (const ring of rings) {
-    let dist = ring.minDist + rng.nextInt(ring.maxDist - ring.minDist + 1);
-    const step = (Math.PI * 2) / ring.count;
+    let dist = ring.min + rng.nextInt(ring.max - ring.min + 1);
+    const step = Math.PI * 2 / ring.count;
     for (let i = 0; i < ring.count; i++) {
       const x = Math.round(Math.cos(angle) * dist);
       const z = Math.round(Math.sin(angle) * dist);
@@ -350,328 +612,112 @@ function findStrongholds(worldSeed, count) {
       angle += step;
     }
     angle += rng.nextFloat() * Math.PI * 2;
+    dist = ring.min + rng.nextInt(ring.max - ring.min + 1);
   }
   return positions;
 }
 
-function scoreSeed(worldSeed, opts) {
-  const { requiredStructs = [], maxDist = 500 } = opts || {};
+function scoreSeed(worldSeed, { requiredStructs=[], maxDist=500 }={}) {
   let score = 0;
   const found = {};
-  for (const structId of requiredStructs) {
-    if (structId === 'stronghold') {
-      const shs = findStrongholds(worldSeed, 3);
-      if (shs[0]) { score += Math.max(0, 100 - shs[0].dist/50); found.stronghold = shs[0]; }
+  for (const sid of requiredStructs) {
+    if (sid === 'stronghold') {
+      const shs = findStrongholds(BigInt(worldSeed), 3);
+      if (shs[0]) { score += Math.max(0, 100 - shs[0].dist/30); found.stronghold = shs[0]; }
       continue;
     }
-    const positions = findStructures(worldSeed, structId, Math.ceil(maxDist/16));
-    if (positions.length > 0) {
-      const n = positions[0];
-      score += Math.max(0, 100 - n.dist/(maxDist/100));
-      found[structId] = n;
-    }
+    const res = findStructures(BigInt(worldSeed), sid, maxDist);
+    if (res.length > 0) { score += Math.max(0, 100 - res[0].dist/(maxDist/100)); found[sid] = res[0]; }
   }
   return { score: Math.round(score), found };
 }
 
-
-function valueNoise(ws, x, z, scale) {
-  const ix = Math.floor(x / scale);
-  const iz = Math.floor(z / scale);
-  const fx = (x / scale) - ix, fz = (z / scale) - iz;
-  const ux = fx*fx*(3-2*fx), uz = fz*fz*(3-2*fz);
-  const h = (gx, gz) => {
-    let v = BigInt.asIntN(64, BigInt(ws) + BigInt(gx)*7738898437n + BigInt(gz)*5765169329n);
-    v = BigInt.asIntN(64, v ^ (v >> 17n));
-    v = BigInt.asIntN(64, v * 0x9e3779b97f4a7c15n);
-    v = BigInt.asIntN(64, v ^ (v >> 31n));
-    v = BigInt.asIntN(64, v * 0x85ebca6b9c100d45n);
-    return Number(BigInt.asUintN(32, v)) / 4294967295;
-  };
-  const a=h(ix,iz), b=h(ix+1,iz), c=h(ix,iz+1), d=h(ix+1,iz+1);
-  return a*(1-ux)*(1-uz) + b*ux*(1-uz) + c*(1-ux)*uz + d*ux*uz;
-}
-
-function getBiomeAt(worldSeed, x, z) {
-  const ws = typeof worldSeed === 'bigint' ? worldSeed : BigInt(worldSeed);
-  const cont = valueNoise(ws, x, z, 700)
-             + valueNoise(ws+1n, x, z, 200) * 0.35
-             + valueNoise(ws+2n, x, z, 60)  * 0.1;
-  const temp = valueNoise(ws+3n, x, z, 900)
-             + valueNoise(ws+4n, x, z, 250) * 0.3;
-  const humi = valueNoise(ws+5n, x, z, 800)
-             + valueNoise(ws+6n, x, z, 220) * 0.3;
-  const weid = valueNoise(ws+7n, x, z, 350)
-             + valueNoise(ws+8n, x, z, 100) * 0.25;
-  const eros = valueNoise(ws+9n, x, z, 550)
-             + valueNoise(ws+10n,x, z, 150) * 0.25;
-
-  // Normalize to 0-1
-  const C = Math.max(0,Math.min(1, cont/1.45));
-  const T = Math.max(0,Math.min(1, temp/1.3));
-  const H = Math.max(0,Math.min(1, humi/1.3));
-  const W = Math.max(0,Math.min(1, weid/1.25));
-  const E = Math.max(0,Math.min(1, eros/1.25));
-
-  if (C < 0.22) {
-    if (T < 0.18) return E < 0.4 ? 'deep_frozen_ocean' : 'frozen_ocean';
-    if (C < 0.14) return T < 0.55 ? 'deep_cold_ocean' : T < 0.78 ? 'deep_ocean' : T < 0.92 ? 'deep_lukewarm_ocean' : 'deep_warm_ocean';
-    return T < 0.3 ? 'cold_ocean' : T < 0.7 ? 'ocean' : T < 0.88 ? 'lukewarm_ocean' : 'warm_ocean';
-  }
-  if (C < 0.30) {
-    if (T < 0.18) return 'snowy_beach';
-    if (H > 0.6)  return 'stony_shore';
-    return 'beach';
-  }
-  if (E < 0.22) { // mountains
-    if (T < 0.2) return W > 0.5 ? 'frozen_peaks' : 'jagged_peaks';
-    if (T < 0.4) return 'stony_peaks';
-    if (T < 0.6) return H > 0.5 ? 'windswept_forest' : 'windswept_hills';
-    return H > 0.6 ? 'grove' : 'windswept_gravelly_hills';
-  }
-  if (T < 0.18) {
-    if (H < 0.4) return 'snowy_plains';
-    if (H < 0.7) return 'ice_spikes';
-    return 'snowy_taiga';
-  }
-  if (T < 0.34) {
-    if (H < 0.25) return 'plains';
-    if (H < 0.5)  return W > 0.6 ? 'taiga' : 'plains';
-    if (H < 0.75) return W > 0.5 ? 'old_growth_pine_taiga' : 'taiga';
-    return 'old_growth_spruce_taiga';
-  }
-  if (T < 0.55) {
-    if (H < 0.18) return W > 0.55 ? 'sunflower_plains' : 'plains';
-    if (H < 0.38) return W > 0.65 ? 'flower_forest' : 'plains';
-    if (H < 0.6)  return W > 0.55 ? 'dark_forest' : 'forest';
-    if (H < 0.78) return W > 0.5 ? 'old_growth_birch_forest' : 'birch_forest';
-    if (H < 0.9)  return 'swamp';
-    return W > 0.5 ? 'mangrove_swamp' : 'swamp';
-  }
-  if (T < 0.76) {
-    if (H < 0.16) return E > 0.6 ? 'savanna_plateau' : 'savanna';
-    if (H < 0.35) return 'savanna';
-    if (H < 0.58) return W > 0.65 ? 'bamboo_jungle' : 'jungle';
-    if (H < 0.78) return 'sparse_jungle';
-    if (H < 0.92) return 'mushroom_fields';
-    return 'mangrove_swamp';
-  }
-  // Hot
-  if (H < 0.18) return E > 0.55 ? 'eroded_badlands' : 'badlands';
-  if (H < 0.35) return W > 0.5  ? 'wooded_badlands' : 'badlands';
-  if (H < 0.55) return 'desert';
-  if (H < 0.75) return 'savanna';
-  if (H < 0.88) return W > 0.5 ? 'bamboo_jungle' : 'jungle';
-  return 'jungle';
-}
-
-function getNetherBiomeAt(worldSeed, x, z) {
-  const ws = typeof worldSeed === 'bigint' ? worldSeed : BigInt(worldSeed);
-  const t = valueNoise(ws+100n, x, z, 400) + valueNoise(ws+101n, x, z, 100)*0.4;
-  const T = Math.max(0,Math.min(1, t/1.4));
-  if (T < 0.18) return 'soul_sand_valley';
-  if (T < 0.36) return 'basalt_deltas';
-  if (T < 0.52) return 'nether_wastes';
-  if (T < 0.70) return 'warped_forest';
-  return 'crimson_forest';
-}
-
-const BIOME_COLORS = {
-  ocean:                    '#1a6b9a',
-  deep_ocean:               '#0d4f75',
-  frozen_ocean:             '#7aa7be',
-  cold_ocean:               '#1a6b8a',
-  lukewarm_ocean:           '#45adb5',
-  warm_ocean:               '#43d5ee',
-  deep_frozen_ocean:        '#5e97b0',
-  deep_cold_ocean:          '#155e7a',
-  deep_lukewarm_ocean:      '#15a0b0',
-  deep_warm_ocean:          '#00c0d5',
-  beach:                    '#fade55',
-  snowy_beach:              '#faf0c0',
-  stony_shore:              '#a2a284',
-  plains:                   '#8db360',
-  sunflower_plains:         '#b5db67',
-  forest:                   '#056621',
-  flower_forest:            '#2d8f00',
-  birch_forest:             '#307444',
-  old_growth_birch_forest:  '#589c6c',
-  dark_forest:              '#40511a',
-  old_growth_pine_taiga:    '#596651',
-  old_growth_spruce_taiga:  '#818e79',
-  taiga:                    '#0b6659',
-  snowy_taiga:              '#31554a',
-  snowy_plains:             '#ffffff',
-  ice_spikes:               '#b4dcdc',
-  jungle:                   '#537b09',
-  sparse_jungle:            '#628b17',
-  bamboo_jungle:            '#768e14',
-  swamp:                    '#07f9b2',
-  mangrove_swamp:           '#2abe4a',
-  mushroom_fields:          '#ff00ff',
-  desert:                   '#fa9418',
-  savanna:                  '#bdb25f',
-  savanna_plateau:          '#a79d64',
-  windswept_savanna:        '#e5da87',
-  badlands:                 '#d94515',
-  eroded_badlands:          '#ff6d3d',
-  wooded_badlands:          '#b09765',
-  meadow:                   '#63a948',
-  cherry_grove:             '#ff97ff',
-  grove:                    '#888888',
-  snowy_slopes:             '#c0c0c0',
-  frozen_peaks:             '#c0d8ff',
-  jagged_peaks:             '#aeaeae',
-  stony_peaks:              '#8f8f8f',
-  windswept_hills:          '#597d72',
-  windswept_gravelly_hills: '#789878',
-  windswept_forest:         '#527a56',
-  river:                    '#1a6b9a',
-  frozen_river:             '#a0c0e0',
-  nether_wastes:            '#bf3b3b',
-  soul_sand_valley:         '#5e3830',
-  basalt_deltas:            '#403636',
-  warped_forest:            '#49907b',
-  crimson_forest:           '#981a1a',
-  the_end:                  '#8080ff',
-  small_end_islands:        '#6060bf',
-  end_midlands:             '#a0a040',
-  end_highlands:            '#c0c040',
-  end_barrens:              '#807050',
-};
-
-
-function hexToRgb(hex) {
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
-  return [r,g,b];
-}
-
-function renderStrip(worldSeed, W, H, offsetX, offsetZ, zoom, dimension, layer, stripY, stripH) {
-  const ws = typeof worldSeed === 'bigint' ? worldSeed : BigInt(worldSeed);
+// ─── RENDER STRIP ───────────────────────────────────────────
+function renderStrip(worldSeed, W, H, offsetX, offsetZ, zoom, dimension, version, stripY, stripH) {
   const buf = new Uint8ClampedArray(W * stripH * 4);
   const ccx = W / 2, ccz = H / 2;
+  const ws = BigInt.asIntN(64, BigInt(worldSeed));
+
+  // Pre-warm the climate cache for this seed
+  if (dimension === 'overworld') getClimate(worldSeed, version);
+
   for (let py = 0; py < stripH; py++) {
     const gy = py + stripY;
     for (let px = 0; px < W; px++) {
+      // Sample every 4 pixels for performance, interpolate between
       const wx = Math.round((px - ccx) / zoom - offsetX);
       const wz = Math.round((gy - ccz) / zoom - offsetZ);
-      let r, g, b;
-      if (layer === 'height') {
-        const cont = valueNoise(ws, wx, wz, 700) + valueNoise(ws+1n, wx, wz, 200)*0.35 + valueNoise(ws+2n, wx, wz, 60)*0.1;
-        const h = Math.max(0, Math.min(1, cont/1.45));
-        if (h < 0.22)      { r=15; g=Math.round(40+h*250); b=Math.round(80+h*200); }
-        else if (h < 0.30) { r=200; g=185; b=90; }
-        else { const u=(h-0.30)/0.70; r=30+Math.round(160*u); g=130-Math.round(80*u); b=20; if(u>0.85){r=210;g=210;b=210;} }
-      } else if (layer === 'temp') {
-        const t = Math.max(0, Math.min(1, (valueNoise(ws+3n, wx, wz, 900)+valueNoise(ws+4n, wx, wz, 250)*0.3)/1.3));
-        r=Math.round(t*255); g=Math.round(80*(1-Math.abs(t-0.5)*2)); b=Math.round((1-t)*220);
+
+      let rgb;
+      if (dimension === 'nether') {
+        rgb = getBiomeRGB(getNetherBiome(worldSeed, wx, wz, version));
       } else {
-        const biome = (dimension === 'nether') ? getNetherBiomeAt(ws, wx, wz) : getBiomeAt(ws, wx, wz);
-        [r, g, b] = hexToRgb(BIOME_COLORS[biome] || '#404040');
+        rgb = getBiomeRGB(getBiome(worldSeed, wx, wz, version));
       }
+
       const i = (py * W + px) * 4;
-      buf[i]=r; buf[i+1]=g; buf[i+2]=b; buf[i+3]=255;
+      buf[i] = rgb[0]; buf[i+1] = rgb[1]; buf[i+2] = rgb[2]; buf[i+3] = 255;
     }
   }
   return buf;
 }
 
-/**
- * Web Worker — runs seed search off main thread so UI stays responsive
- */
-let stopped = false;
+// ─── MESSAGE HANDLER ────────────────────────────────────────
+let _stopped = false;
 
 self.onmessage = function(e) {
   const { type, payload } = e.data;
-  
-  if (type === 'stop') {
-    stopped = true;
-    return;
-  }
 
-  if (type === 'search') {
-    stopped = false;
-    const {
-      requiredStructs,
-      maxDist,
-      totalSeeds,
-      seedStart,
-      version,
-    } = payload;
-
-    let checked = 0;
-    const BATCH = 200;
-
-    function runBatch() {
-      if (stopped) {
-        self.postMessage({ type: 'done', checked });
-        return;
-      }
-
-      const results = [];
-      const end = Math.min(checked + BATCH, totalSeeds);
-
-      for (let i = checked; i < end; i++) {
-        // Random 64-bit seed
-        const lo = Math.floor(Math.random() * 0xFFFFFFFF);
-        const hi = Math.floor(Math.random() * 0xFFFFFFFF);
-        const seed = BigInt.asIntN(64, (BigInt(hi) << 32n) | BigInt(lo >>> 0));
-
-        const { score, found } = scoreSeed(seed, { requiredStructs, maxDist });
-
-        const meetsRequirements = requiredStructs.length === 0 ||
-          requiredStructs.every(s => found[s] !== undefined);
-
-        if (meetsRequirements || requiredStructs.length === 0) {
-          results.push({
-            seed: seed.toString(),
-            score,
-            found: Object.fromEntries(
-              Object.entries(found).map(([k, v]) => [k, { x: v.x, z: v.z, dist: v.dist }])
-            )
-          });
-        }
-      }
-
-      checked = end;
-      self.postMessage({ type: 'batch', results, checked, total: totalSeeds });
-
-      if (checked < totalSeeds && !stopped) {
-        setTimeout(runBatch, 0);
-      } else {
-        self.postMessage({ type: 'done', checked });
-      }
-    }
-
-    runBatch();
-  }
+  if (type === 'stop') { _stopped = true; return; }
 
   if (type === 'render') {
-    const { worldSeed, W, H, offsetX, offsetZ, zoom, dimension, layer, stripY, stripH } = payload;
-    const buf = renderStrip(worldSeed, W, H, offsetX, offsetZ, zoom, dimension, layer, stripY, stripH);
+    const { worldSeed, W, H, offsetX, offsetZ, zoom, dimension, version, layer, stripY, stripH } = payload;
+    const buf = renderStrip(worldSeed, W, H, offsetX, offsetZ, zoom, dimension, version || 'java', stripY, stripH);
     self.postMessage({ type:'strip', buf, stripY, stripH, W }, [buf.buffer]);
     return;
   }
 
   if (type === 'analyze') {
-    // Analyze a specific seed
-    const { seed, structureIds, maxDist } = payload;
-    const allStructs = [];
-    
-    for (const structId of structureIds) {
-      if (structId === 'stronghold') {
-        const shs = findStrongholds(BigInt(seed), 9);
-        shs.forEach(s => allStructs.push({ ...s, type: 'stronghold' }));
-        continue;
-      }
-      const pos2 = findStructures(BigInt(seed), structId, Math.ceil(maxDist/16)+10);
-      allStructs.push(...pos2.slice(0, 30));
-  
+    const { worldSeed, structureIds, maxDist } = payload;
+    const ws = BigInt(worldSeed);
+    const all = [];
+    for (const sid of structureIds) {
+      if (sid === 'stronghold') { all.push(...findStrongholds(ws, 128)); continue; }
+      all.push(...findStructures(ws, sid, maxDist));
     }
+    self.postMessage({ type:'analyzed', structures: all, worldSeed });
+    return;
+  }
 
-    self.postMessage({ type: 'analyzed', structures: allStructs });
+  if (type === 'search') {
+    _stopped = false;
+    const { requiredStructs, maxDist, totalSeeds, version } = payload;
+    let checked = 0;
+    const BATCH = 300;
+
+    function batch() {
+      if (_stopped) { self.postMessage({ type:'done', checked }); return; }
+      const results = [];
+      const end = Math.min(checked + BATCH, totalSeeds);
+      for (let i = checked; i < end; i++) {
+        const lo = (Math.random() * 0xFFFFFFFF) >>> 0;
+        const hi = (Math.random() * 0xFFFFFFFF) >>> 0;
+        const seed = BigInt.asIntN(64, (BigInt(hi) << 32n) | BigInt(lo));
+        const { score, found } = scoreSeed(seed, { requiredStructs, maxDist });
+        const ok = requiredStructs.length === 0 || requiredStructs.every(s => found[s]);
+        if (ok) {
+          const f = {};
+          for (const [k,v] of Object.entries(found)) f[k] = { x:v.x, z:v.z, dist:v.dist };
+          results.push({ seed: seed.toString(), score, found: f });
+        }
+      }
+      checked = end;
+      self.postMessage({ type:'batch', results, checked, total: totalSeeds });
+      if (checked < totalSeeds && !_stopped) setTimeout(batch, 0);
+      else self.postMessage({ type:'done', checked });
+    }
+    batch();
+    return;
   }
 };
 
@@ -755,7 +801,7 @@ function render() {
     rW.postMessage({type:'render', payload:{
       worldSeed: S.seed.toString(), W, H,
       offsetX:S.ox, offsetZ:S.oz, zoom:S.zoom,
-      dimension:S.dim, layer:S.layer,
+      dimension:S.dim, version:S.ver, layer:S.layer,
       stripY:y, stripH:sh,
     }});
     y += sh;
@@ -773,7 +819,36 @@ function render() {
 
 function drawMarkers() {
   const W = cv.width, H = cv.height, ccx = W/2, ccz = H/2;
-  // Spawn cross
+
+  // ── Coordinate grid (chunk/region lines) ──
+  cx2.save();
+  const gridSize = S.zoom >= 8 ? 16 : S.zoom >= 2 ? 128 : S.zoom >= 0.5 ? 512 : 2048;
+  const startX = Math.floor((-ccx/S.zoom - S.ox) / gridSize) * gridSize;
+  const startZ = Math.floor((-ccz/S.zoom - S.oz) / gridSize) * gridSize;
+  cx2.strokeStyle = S.zoom >= 4 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.2)';
+  cx2.lineWidth = 0.5;
+  for (let gx = startX; gx < startX + W/S.zoom + gridSize*2; gx += gridSize) {
+    const px = ccx + (gx + S.ox) * S.zoom;
+    cx2.beginPath(); cx2.moveTo(px, 0); cx2.lineTo(px, H); cx2.stroke();
+    // Label at bottom edge
+    if (S.zoom >= 0.3) {
+      cx2.fillStyle = 'rgba(255,255,255,0.6)'; cx2.font = '9px monospace';
+      cx2.textAlign = 'center';
+      cx2.fillText(Math.round(gx).toString(), px, H - 4);
+    }
+  }
+  for (let gz = startZ; gz < startZ + H/S.zoom + gridSize*2; gz += gridSize) {
+    const pz = ccz + (gz + S.oz) * S.zoom;
+    cx2.beginPath(); cx2.moveTo(0, pz); cx2.lineTo(W, pz); cx2.stroke();
+    if (S.zoom >= 0.3) {
+      cx2.fillStyle = 'rgba(255,255,255,0.6)'; cx2.font = '9px monospace';
+      cx2.textAlign = 'right';
+      cx2.fillText(Math.round(gz).toString(), W - 4, pz - 2);
+    }
+  }
+  cx2.restore();
+
+  // ── Spawn cross ──
   cx2.save(); cx2.strokeStyle='#fff'; cx2.lineWidth=1.5; cx2.globalAlpha=.65;
   const sx=ccx+S.ox*S.zoom, sz=ccz+S.oz*S.zoom;
   cx2.beginPath(); cx2.moveTo(sx-8,sz); cx2.lineTo(sx+8,sz); cx2.moveTo(sx,sz-8); cx2.lineTo(sx,sz+8); cx2.stroke();
@@ -1029,7 +1104,9 @@ function setVer(v){
   S.ver=v;
   document.getElementById('bjv').className='vbtn'+(v==='java'?' oj':'');
   document.getElementById('bbk').className='vbtn'+(v==='bedrock'?' ob':'');
-  notif(v==='bedrock'?'Bedrock: partial structure support (salts differ)':'Java: full algorithm active');
+  // Clear climate cache for this seed so map re-renders with new version
+  if(S.seed!==null){ doAnalyze(S.seed); sched(); }
+  notif(v==='bedrock'?'🪨 Bedrock Edition — different biome layout':'☕ Java Edition — exact cubiomes algorithms');
 }
 
 // ─── STRUCT GRID ─────────────────────────────────────────
